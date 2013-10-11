@@ -1,6 +1,6 @@
 var app = angular.module("plunker",['$strap.directives']);
+
 app.controller("TypeaheadCtrl", function($scope,$http) {
-	$scope.typeahead = ["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Dakota","North Carolina","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming"];
 	var api = [];
 	api[0] = "http://pre.dev.goeuro.de:12345/api/v1/suggest/position/en/name/";
 	api[1] = "http://localhost:3000/api/v1/suggest/position/en/name/"
@@ -8,7 +8,7 @@ app.controller("TypeaheadCtrl", function($scope,$http) {
 	api[3] = "http://api.geonames.org/postalCodeSearchJSON?maxRows=10&username=demo&placename=";
 	api[4] = "https://maps.googleapis.com/maps/api/geocode/json?sensor=false&language=en&components=political&address=";
 	api[5] = "https://localhost:3000/maps/api/geocode/json?sensor=false&region=de&language=en&components=political&address=";
-
+	api[6] = "http://api.wikimapia.org/?function=place.getnearest&format=json&key=3AFDBB58-4B95559-FFC9B7FA-014B0553-8D3CAAD9-577C32E5-2304A1B4-5410685F";
 	if (typeof(Number.prototype.toRad) === "undefined") {
 	  Number.prototype.toRad = function() {
 	    return this * Math.PI / 180;
@@ -16,7 +16,8 @@ app.controller("TypeaheadCtrl", function($scope,$http) {
 	}
 
 	curPos = navigator.geolocation.getCurrentPosition(function(a,b,c){
-		$scope.curPos= a.coords
+		$scope.curPos= a.coords;
+		getWikiByPos($scope.curPos);
 	},function(a){
 		console.log('Only on hosting',a);
 		$scope.curPos = {};
@@ -24,6 +25,13 @@ app.controller("TypeaheadCtrl", function($scope,$http) {
 		$scope.curPos.longitude = 41;
 	});
 	
+	getWikiByPos = function (coords){
+		$.getJSON(api[6]+'&lat='+coords.latitude+'&lon='+coords.longitude).
+			done(function(response) {				
+				$scope.curPos.name = response.places[0].title;				
+			})
+	}
+
 	$scope.getGEO = function(query,callback){
 		$.getJSON(api[4] + query).
 			done(function (response, err) {
@@ -38,7 +46,7 @@ app.controller("TypeaheadCtrl", function($scope,$http) {
 					});
 					
 					callback(result);
-			});
+			}).fail(function(err) {console.log(err)});
 	}
 
 	$scope.CityCollection=[];
@@ -54,8 +62,12 @@ app.controller("TypeaheadCtrl", function($scope,$http) {
 						return a.distance-b.distance;
 					});
 
-				$scope.CityCollection.push(result[0]);			
+				$scope.CityCollection.push(result[0]);		
+					
 				if($scope.CityCollection.length == condition){
+					$scope.CityCollection = $.map($scope.CityCollection, function(el){
+						if (el) {return el}
+					})
 					cb($scope.CityCollection);
 				}
 			})
@@ -79,23 +91,22 @@ app.controller("TypeaheadCtrl", function($scope,$http) {
 		$http.jsonp(api[2]+cityName).
 			success( function(response, status){
 				
-				var tempCallback = function(tempResponse){
-					console.log('Handled',tempResponse.length);
-					var onlyCityName =tempResponse.sort(function(a,b){
-							return a.distance-b.distance;
+				var tempCallback = function(tempResponse){					
+					$scope.CitysByQuery = tempResponse.sort(function(a,b) {
+							return a.distance - b.distance;
 						});
-					$scope.CitysByQuery = onlyCityName;
-					onlyCityName=$.map(onlyCityName,function(el){
+					
+					onlyCityName=$.map($scope.CitysByQuery, function(el) {
 							if (el) {
 								return el.name+' '+el.distance+'km.'
 							}
 						});
 					callback(onlyCityName);
-					
+					//callback($scope.CitysByQuery);
 				};
 
 				if(response.length>0){
-					$scope.CityCollection=[]; console.log(response.length,response.join("///"))
+					$scope.CityCollection=[]; 
 					$.each(response,function(el){
 						detailInfo(response[el], tempCallback, response.length);
 					})
@@ -108,5 +119,22 @@ app.controller("TypeaheadCtrl", function($scope,$http) {
 		return	    	result;
 	    	
   	};
+
+	 
+  	console.log($scope);
+  	$scope.$watch('geo', function(prevVal,newVal){console.log(3,prevVal,newVal);
+  		if($scope.CitysByQuery){
+  			console.log($scope.CitysByQuery);
+  			var position = 0;
+  			var hasSelectedElement = $scope.CitysByQuery.some(function(x,pos){if (x){if ($scope.typeaheadValue.indexOf(x.name)==0) {return x;}}});
+  			if (hasSelectedElement){
+  				$scope.curPos.name = $scope.CitysByQuery[position].name;
+  				$scope.curPos.latitude = $scope.CitysByQuery[position].geo.lat;
+				$scope.curPos.longitude = $scope.CitysByQuery[position].geo.lng;
+  			}
+  			
+  		}
+  	});
 	
 });
+
